@@ -1,8 +1,9 @@
 trigger:
-- main  # الـ Pipeline هتشتغل تلقائي أول ما يحصل تعديل على فرع main
+- main
+- master
 
 pool:
-  name: 'Mylerz-Test-Pool'  # اسم الـ Pool بتاع السيرفر بتاعك اللي عملناه سوا
+  name: 'Mylerz-Test-Pool'
 
 variables:
   solution: '**/*.sln'
@@ -10,29 +11,36 @@ variables:
   buildConfiguration: 'Release'
 
 stages:
-- stage: BuildStage
-  displayName: 'Build and Package'
+- stage: BuildAndDeployStage
+  displayName: 'Build and Deploy to IIS'
   jobs:
-  - job: BuildJob
+  - job: CICDJob
     steps:
-    # 1. خطوة تحميل الـ NuGet Packages اللي بيعتمد عليها الأبلكيشن
+    # 1. تحميل الـ NuGet Packages
     - task: NuGetToolInstaller@1
 
     - task: NuGetCommand@2
       inputs:
         restoreSolution: '$(solution)'
 
-    # 2. خطوة عمل الـ Build للأبلكيشن باستخدام MSBuild وتجهيز فايلات الـ Web Deploy
+    # 2. عمل الـ Build وإخراج ملف الـ Web Deploy في الباص المظبوط
     - task: VSBuild@1
       inputs:
         solution: '$(solution)'
-        msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(buildArtifactRepository)/WebApp.zip"'
+        msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(Build.ArtifactStagingDirectory)\WebApp.zip"'
         platform: '$(buildPlatform)'
         configuration: '$(buildConfiguration)'
 
-    # 3. خطوة حفظ الملف الـ Zip الناتج (Artifact) عشان نستخدمه في الـ Deployment
+    # 3. رفع الـ Artifact للـ Azure DevOps (عشان تفضل النسخة معاك)
     - task: PublishBuildArtifacts@1
       inputs:
-        PathtoPublish: '$(buildArtifactRepository)'
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
         ArtifactName: 'drop'
         publishLocation: 'Container'
+
+    # 4. الـ Auto Deployment السحري على الـ IIS عندك في السيرفر عل طول!
+    - task: IISWebAppDeploymentOnMachineGroup@0
+      displayName: 'Deploy to Local IIS Website'
+      inputs:
+        WebSiteName: 'DemoAppSite' # اسم الموقع اللي عملناه في الـ IIS
+        Package: '$(Build.ArtifactStagingDirectory)\WebApp.zip'
