@@ -1,0 +1,38 @@
+trigger:
+- main  # الـ Pipeline هتشتغل تلقائي أول ما يحصل تعديل على فرع main
+
+pool:
+  name: 'Mylerz-Test-Pool'  # اسم الـ Pool بتاع السيرفر بتاعك اللي عملناه سوا
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+
+stages:
+- stage: BuildStage
+  displayName: 'Build and Package'
+  jobs:
+  - job: BuildJob
+    steps:
+    # 1. خطوة تحميل الـ NuGet Packages اللي بيعتمد عليها الأبلكيشن
+    - task: NuGetToolInstaller@1
+
+    - task: NuGetCommand@2
+      inputs:
+        restoreSolution: '$(solution)'
+
+    # 2. خطوة عمل الـ Build للأبلكيشن باستخدام MSBuild وتجهيز فايلات الـ Web Deploy
+    - task: VSBuild@1
+      inputs:
+        solution: '$(solution)'
+        msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(buildArtifactRepository)/WebApp.zip"'
+        platform: '$(buildPlatform)'
+        configuration: '$(buildConfiguration)'
+
+    # 3. خطوة حفظ الملف الـ Zip الناتج (Artifact) عشان نستخدمه في الـ Deployment
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(buildArtifactRepository)'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
